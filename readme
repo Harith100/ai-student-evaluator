@@ -1,0 +1,29 @@
+
+# USECASE4
+
+STUDENT EVALUATION
+
+
+
+
+## Installation
+Activate venv . then
+Install packages
+
+```bash
+  pip install -r requirements.txt
+```
+    
+## Running Tests
+
+To run tests, run the following command
+
+```bash
+  python -m src.ui_app
+
+```
+## Open
+```bash
+    http://127.0.0.1:7860
+
+```

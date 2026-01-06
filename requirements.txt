@@ -1,0 +1,12 @@
+pydantic
+fastapi
+uvicorn
+gradio
+pymupdf
+sentence-transformers
+faiss-cpu
+groq
+python-dotenv
+beautifulsoup4
+numpy
+python-dotenv

@@ -19,7 +19,7 @@ Install packages
 To run tests, run the following command
 
 ```bash
-  python -m src.ui_app
+python -m src.test_adaptive
 
 ```
 ## Open

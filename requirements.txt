@@ -13,5 +13,12 @@ opencv-python
 mediapipe
 pyMuPDF
 groq
-dotenv
+python-dotenv
 librosa
+flask
+fastapi
+pydantic
+gradio
+scikit-fuzzy
+torch
+silero-vad

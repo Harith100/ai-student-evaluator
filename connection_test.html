@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Orchestra Connection Test</title>
+</head>
+<body>
+
+<h2>Loop Orchestra Video Node Test</h2>
+
+<button onclick="startExam()">Test Start Exam</button>
+
+<pre id="output" style="margin-top:20px; background:#eee; padding:10px;"></pre>
+
+<script>
+
+async function startExam() {
+
+  const output = document.getElementById("output")
+  output.innerText = "Calling backend..."
+
+  try {
+
+    const response = await fetch("http://localhost:8001/nodes/ai_tool/student-exam-video-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        metadata: {
+          name: "__debug__",   // IMPORTANT
+          workflow_name: "debug",
+          workflow_type: "NodeType : ai-tool",
+          workflow_id: "debug",
+          workflow_run_id: "debug",
+          run_id: null,
+          start: false,
+          tags: {}
+        },
+        data: {
+          action: "start",
+          questions: [
+            {
+              id: "1",
+              question: "What is an ecosystem?",
+              model_answer: "...",
+              expected_concepts: ["ecosystem"]
+            }
+          ]
+        }
+      })
+    })
+
+    const json = await response.json()
+
+    output.innerText = JSON.stringify(json, null, 2)
+
+  } catch (err) {
+    output.innerText = "ERROR:\n" + err
+  }
+}
+
+</script>
+
+</body>
+</html>

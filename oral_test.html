@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Oral Exam Test</title>
+</head>
+<body>
+
+<h2 id="question">Click Start</h2>
+<div id="transcript" style="margin-top:20px; color:blue;"></div>
+<div id="status" style="margin-top:10px;"></div>
+
+<button onclick="startExam()">Start Oral Exam</button>
+
+<script>
+
+let examId = null
+let mediaRecorder
+let recordedChunks = []
+
+// 🔹 Replace with real generator output later
+const questions = [
+  {
+    id: "1",
+    question: "Explain what an ecosystem is.",
+    model_answer: "...",
+    expected_concepts: ["ecosystem"]
+  },
+  {
+    id: "2",
+    question: "What is photosynthesis?",
+    model_answer: "...",
+    expected_concepts: ["photosynthesis"]
+  }
+]
+
+// -----------------------------
+// START EXAM
+// -----------------------------
+async function startExam() {
+
+  console.log("🚀 Starting exam...")
+
+  try {
+    const res = await fetch("http://localhost:8001/nodes/ai_tool/student-exam-video-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        metadata: {
+          name: "start-exam",
+          workflow_name: "video-exam",
+          workflow_type: "NodeType : ai-tool",
+          workflow_id: "video-001",
+          workflow_run_id: "run-001",
+          run_id: null,
+          start: false,
+          tags: {}
+        },
+        data: {
+          action: "start",
+          questions: questions
+        }
+      })
+    })
+
+    console.log("📡 Response status:", res.status)
+
+    const json = await res.json()
+    console.log("📦 Response body:", json)
+
+    if (!json.data) {
+      alert("No data returned from backend")
+      return
+    }
+
+    examId = json.data.exam_id
+
+    if (!json.data.question) {
+      alert("No question returned from backend")
+      return
+    }
+
+    await handleQuestion(json.data.question)
+
+  } catch (err) {
+    console.error("❌ Error:", err)
+    alert("Backend request failed. Check console.")
+  }
+}
+
+// -----------------------------
+// HANDLE QUESTION
+// -----------------------------
+async function handleQuestion(questionObj) {
+
+  document.getElementById("question").innerText =
+    questionObj.question
+
+  document.getElementById("transcript").innerText = ""
+  document.getElementById("status").innerText = "Speaking question..."
+
+  await speak(questionObj.question)
+
+  document.getElementById("status").innerText = "Recording..."
+
+  await recordAnswer()
+}
+
+// -----------------------------
+// TTS
+// -----------------------------
+function speak(text) {
+  return new Promise(resolve => {
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.onend = resolve
+    speechSynthesis.speak(utterance)
+  })
+}
+
+// -----------------------------
+// RECORD ANSWER
+// -----------------------------
+async function recordAnswer() {
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: true
+  })
+
+  mediaRecorder = new MediaRecorder(stream)
+  recordedChunks = []
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) recordedChunks.push(e.data)
+  }
+
+  mediaRecorder.start()
+
+  // 🔥 For now: stop after 10 seconds
+  setTimeout(() => {
+    mediaRecorder.stop()
+  }, 10000)
+
+  await new Promise(resolve => {
+    mediaRecorder.onstop = resolve
+  })
+
+  document.getElementById("status").innerText = "Uploading..."
+
+  const blob = new Blob(recordedChunks, { type: "video/webm" })
+
+  const formData = new FormData()
+  formData.append("file", blob, "recording.webm")
+
+  const uploadRes = await fetch("http://localhost:8001/upload-media", {
+    method: "POST",
+    body: formData
+  })
+
+  const uploadJson = await uploadRes.json()
+
+  await submitAnswer(uploadJson.path)
+}
+
+// -----------------------------
+// SUBMIT ANSWER
+// -----------------------------
+async function submitAnswer(mediaPath) {
+
+  document.getElementById("status").innerText = "Processing..."
+
+  const res = await fetch("http://localhost:8001/nodes/ai_tool/student-exam-video-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      metadata: {
+        name: "submit-answer",
+        workflow_name: "video-exam",
+        workflow_type: "NodeType : ai-tool",
+        workflow_id: "video-001",
+        workflow_run_id: "run-001",
+        run_id: null,
+        start: false,
+        tags: {}
+      },
+      data: {
+        action: "answer",
+        exam_id: examId,
+        audio_path: mediaPath,
+        video_path: mediaPath,
+        storage_ref: "nodesbucket"
+      }
+    })
+  })
+
+  const json = await res.json()
+
+  if (json.data.transcript || json.data.last_transcript) {
+    document.getElementById("transcript").innerText =
+      "You said: " +
+      (json.data.transcript || json.data.last_transcript)
+
+    await delay(2500)
+  }
+
+  if (json.data.status === "question") {
+    await handleQuestion(json.data.question)
+  }
+
+  if (json.data.status === "completed") {
+    document.getElementById("status").innerText =
+      "Exam Completed!"
+  }
+}
+
+// -----------------------------
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+</script>
+</body>
+</html>

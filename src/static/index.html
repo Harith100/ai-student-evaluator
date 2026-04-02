@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confidence Calibration Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0a0a0f;
+    --panel:   #111118;
+    --border:  #1e1e2e;
+    --accent:  #00ff88;
+    --accent2: #ff6b35;
+    --accent3: #7c5cfc;
+    --text:    #e8e8f0;
+    --muted:   #555570;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grid noise texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, #1a1a2a 39px, #1a1a2a 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, #1a1a2a 39px, #1a1a2a 40px);
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px 60px; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .logo { font-family: var(--sans); font-weight: 800; font-size: 1.1rem; letter-spacing: -.5px; }
+  .logo span { color: var(--accent); }
+  .badge {
+    font-size: .65rem; background: var(--border); border: 1px solid var(--muted);
+    padding: 3px 10px; border-radius: 100px; color: var(--muted); letter-spacing: 2px;
+  }
+
+  /* ── Layout ── */
+  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: .7rem; letter-spacing: 2px; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .panel-body { padding: 20px; }
+
+  /* ── Input Section ── */
+  .input-tabs { display: flex; gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 18px; }
+  .tab {
+    flex: 1; padding: 9px; text-align: center; font-size: .72rem;
+    cursor: pointer; background: var(--panel); color: var(--muted);
+    transition: all .2s; letter-spacing: 1px; border: none; font-family: var(--mono);
+  }
+  .tab.active { background: var(--accent); color: #000; font-weight: 600; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .btn {
+    width: 100%; padding: 11px; border-radius: 8px; border: none;
+    font-family: var(--mono); font-size: .78rem; cursor: pointer;
+    font-weight: 600; letter-spacing: 1px; transition: all .2s;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-primary:disabled { background: var(--muted); color: #333; cursor: not-allowed; }
+  .btn-danger  { background: var(--accent2); color: #000; margin-top: 8px; }
+  .btn-danger:hover { filter: brightness(1.1); }
+  .btn-outline {
+    background: transparent; color: var(--accent); border: 1px solid var(--accent);
+    margin-top: 8px;
+  }
+  .btn-outline:hover { background: var(--accent); color: #000; }
+
+  .file-drop {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 28px 16px; text-align: center;
+    color: var(--muted); font-size: .72rem; line-height: 1.8;
+    cursor: pointer; transition: border-color .2s, color .2s;
+    margin-bottom: 12px;
+  }
+  .file-drop:hover, .file-drop.drag-over { border-color: var(--accent); color: var(--accent); }
+  .file-drop input { display: none; }
+
+  .status-line {
+    font-size: .68rem; color: var(--muted); margin-top: 10px;
+    min-height: 18px; transition: color .3s;
+  }
+  .status-line.ok   { color: var(--accent); }
+  .status-line.err  { color: var(--accent2); }
+  .status-line.busy { color: var(--accent3); }
+
+  .duration-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .duration-row label { font-size: .7rem; color: var(--muted); white-space: nowrap; }
+  .duration-row input[type=number] {
+    width: 72px; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 6px;
+    font-family: var(--mono); font-size: .78rem;
+  }
+
+  /* ── Sliders ── */
+  .section-label {
+    font-size: .62rem; letter-spacing: 2px; color: var(--accent3);
+    margin: 20px 0 12px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .slider-row { margin-bottom: 14px; }
+  .slider-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .slider-name { font-size: .7rem; color: var(--text); }
+  .slider-val  {
+    font-size: .75rem; font-weight: 600; color: var(--accent);
+    min-width: 48px; text-align: right; transition: color .2s;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none; width: 100%; height: 3px;
+    background: var(--border); border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 8px var(--accent); cursor: pointer;
+    transition: transform .15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+
+  .weight-hint { font-size: .62rem; color: var(--muted); margin-top: 4px; }
+  #weight-sum-warn { font-size: .68rem; color: var(--accent2); margin-top: 8px; display: none; }
+
+  /* ── Results ── */
+  .results-panel { position: sticky; top: 20px; }
+
+  .confidence-ring-wrap { display: flex; justify-content: center; padding: 28px 0 20px; }
+  .ring-svg { overflow: visible; }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 10; }
+  .ring-fill  {
+    fill: none; stroke: var(--accent); stroke-width: 10;
+    stroke-linecap: round;
+    stroke-dasharray: 565.49;
+    stroke-dashoffset: 565.49;
+    transform-origin: center;
+    transform: rotate(-90deg);
+    transition: stroke-dashoffset .8s cubic-bezier(.4,0,.2,1), stroke .4s;
+  }
+  .ring-label { font-family: var(--sans); font-size: 2.4rem; font-weight: 800; fill: var(--text); text-anchor: middle; dominant-baseline: middle; }
+  .ring-sub   { font-size: .62rem; fill: var(--muted); text-anchor: middle; font-family: var(--mono); letter-spacing: 2px; }
+
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .metric-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px;
+  }
+  .metric-card-label { font-size: .62rem; color: var(--muted); letter-spacing: 1.5px; margin-bottom: 6px; }
+  .metric-card-val   { font-size: 1.3rem; font-weight: 600; font-family: var(--sans); color: var(--accent); }
+  .metric-bar-wrap { margin-top: 8px; background: var(--border); border-radius: 2px; height: 3px; }
+  .metric-bar      { height: 3px; border-radius: 2px; background: var(--accent); transition: width .6s ease; width: 0%; }
+
+  .blink-extra { grid-column: 1 / -1; display: flex; gap: 12px; }
+  .blink-extra .metric-card { flex: 1; }
+
+  .analyze-btn-wrap { margin-bottom: 16px; }
+
+  /* ── Export ── */
+  .export-block {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; margin-top: 16px;
+  }
+  .export-block pre {
+    font-size: .65rem; color: var(--accent); white-space: pre-wrap;
+    word-break: break-all; max-height: 200px; overflow-y: auto; line-height: 1.7;
+  }
+
+  .copy-row { display: flex; gap: 8px; margin-top: 10px; }
+  .copy-row .btn { flex: 1; padding: 9px; font-size: .7rem; }
+
+  /* ── Log ── */
+  #run-log {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+    max-height: 130px; overflow-y: auto;
+    font-size: .65rem; color: var(--muted); line-height: 2;
+    margin-top: 16px;
+  }
+  .log-entry { display: flex; gap: 10px; }
+  .log-ts  { color: var(--accent3); min-width: 70px; }
+  .log-conf{ color: var(--accent);  font-weight: 600; min-width: 55px; }
+  .log-note{ color: var(--muted); }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: none; width: 16px; height: 16px;
+    border: 2px solid transparent; border-top-color: #000;
+    border-radius: 50%; animation: spin .7s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <div class="logo">CONF<span>.</span>CALIBRATE</div>
+    <div class="badge">CALIBRATION STUDIO</div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: Controls -->
+    <div>
+      <!-- Video Input Panel -->
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-header"><div class="dot"></div>VIDEO INPUT</div>
+        <div class="panel-body">
+          <div class="input-tabs">
+            <button class="tab active" onclick="switchTab('upload')">UPLOAD</button>
+            <button class="tab" onclick="switchTab('record')">RECORD LIVE</button>
+          </div>
+
+          <div id="tab-upload" class="tab-content active">
+            <div class="file-drop" id="file-drop" onclick="document.getElementById('file-input').click()">
+              <input type="file" id="file-input" accept="video/*">
+              <div>↑ DROP VIDEO FILE</div>
+              <div style="font-size:.62rem;margin-top:6px">or click to browse</div>
+            </div>
+            <button class="btn btn-primary" id="upload-btn" onclick="uploadVideo()" disabled>
+              <span id="upload-label">UPLOAD & SET</span>
+              <div class="spinner" id="upload-spinner"></div>
+            </button>
+            <div class="status-line" id="upload-status">No file selected</div>
+          </div>
+
+          <div id="tab-record" class="tab-content">
+            <div class="duration-row">
+              <label>DURATION (SEC)</label>
+              <input type="number" id="rec-duration" value="8" min="3" max="60">
+            </div>
+            <button class="btn btn-danger" id="record-btn" onclick="recordVideo()">
+              <span id="record-label">⏺ START RECORDING</span>
+              <div class="spinner" id="record-spinner"></div>
+            </button>
+            <div class="status-line" id="record-status">Ready</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sliders Panel -->
+      <div class="panel">
+        <div class="panel-header"><div class="dot" style="background:var(--accent3);box-shadow:0 0 8px var(--accent3)"></div>PARAMETERS</div>
+        <div class="panel-body">
+
+          <!-- Gaze -->
+          <div class="section-label">GAZE (HEAD POSE)</div>
+          <div id="sliders-gaze"></div>
+
+          <!-- Stability -->
+          <div class="section-label">HEAD STABILITY & SMOOTHER</div>
+          <div id="sliders-stability"></div>
+
+          <!-- Blink -->
+          <div class="section-label">BLINK (EAR METHOD)</div>
+          <div id="sliders-blink"></div>
+
+          <button class="btn btn-outline" onclick="resetDefaults()" style="margin-top:8px">↺ RESET TO DEFAULTS</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Results -->
+    <div class="results-panel">
+      <div class="panel">
+        <div class="panel-header"><div class="dot" style="background:var(--accent2);box-shadow:0 0 8px var(--accent2)"></div>RESULTS</div>
+        <div class="panel-body">
+
+          <div class="analyze-btn-wrap">
+            <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()" disabled>
+              <span id="analyze-label">▶ ANALYZE VIDEO</span>
+              <div class="spinner" id="analyze-spinner"></div>
+            </button>
+            <div class="status-line" id="analyze-status">Upload or record a video first</div>
+          </div>
+
+          <!-- Confidence ring -->
+          <div class="confidence-ring-wrap">
+            <svg class="ring-svg" width="180" height="180" viewBox="0 0 180 180">
+              <circle class="ring-track" cx="90" cy="90" r="80"/>
+              <circle class="ring-fill"  cx="90" cy="90" r="80" id="ring-fill"/>
+              <text class="ring-label" x="90" y="86" id="ring-label">—</text>
+              <text class="ring-sub"   x="90" y="112" id="ring-sub">CONFIDENCE</text>
+            </svg>
+          </div>
+
+          <!-- Metric cards -->
+          <div class="metric-grid">
+            <div class="metric-card">
+              <div class="metric-card-label">FACE RATIO</div>
+              <div class="metric-card-val" id="m-face-ratio">—</div>
+              <div class="metric-bar-wrap"><div class="metric-bar" id="b-face-ratio"></div></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-card-label">HEAD STABILITY</div>
+              <div class="metric-card-val" id="m-head-stability">—</div>
+              <div class="metric-bar-wrap"><div class="metric-bar" id="b-head-stability"></div></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-card-label">GAZE PRESENCE</div>
+              <div class="metric-card-val" id="m-gaze-presence">—</div>
+              <div class="metric-bar-wrap"><div class="metric-bar" id="b-gaze-presence"></div></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-card-label">BLINK SCORE</div>
+              <div class="metric-card-val" id="m-blink-score">—</div>
+              <div class="metric-bar-wrap"><div class="metric-bar" id="b-blink-score"></div></div>
+            </div>
+            <div class="blink-extra">
+              <div class="metric-card">
+                <div class="metric-card-label">BLINK RATE /min</div>
+                <div class="metric-card-val" id="m-blink-rate" style="color:var(--accent3)">—</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">FRAMES ANALYZED</div>
+                <div class="metric-card-val" id="m-frames" style="color:var(--muted);font-size:1rem">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Run log -->
+          <div id="run-log"><div style="color:var(--muted);font-size:.65rem">Run history will appear here…</div></div>
+
+          <!-- Export -->
+          <div class="export-block">
+            <div class="section-label" style="margin-top:0">EXPORT PARAMS</div>
+            <pre id="export-pre"># Run an analysis to generate export</pre>
+            <div class="copy-row">
+              <button class="btn btn-outline" onclick="copyExport()">⎘ COPY JSON</button>
+              <button class="btn btn-outline" onclick="copyPythonDict()">⎘ COPY PYTHON DICT</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let videoPath   = null;
+let runCount    = 0;
+let lastParams  = null;
+let lastResults = null;
+
+// ── Slider config ──────────────────────────────────────────────────────────
+const SLIDER_GROUPS = {
+  gaze: [
+    { key: "gaze_yaw_threshold",   label: "Gaze Yaw Threshold (°)",   min: 3, max: 30, step: 1,
+      hint: "Head left/right degrees before counting as 'looking away'. Lower = stricter." },
+    { key: "gaze_pitch_threshold", label: "Gaze Pitch Threshold (°)", min: 3, max: 30, step: 1,
+      hint: "Head up/down degrees before counting as 'looking away'. Lower = stricter." },
+  ],
+  stability: [
+    { key: "stability_window",     label: "Stability Window (frames)", min: 5,  max: 60,  step: 1,
+      hint: "Rolling window for nose-X std-dev." },
+    { key: "stability_exp_scale",  label: "Stability Exp Scale",       min: 1,  max: 25,  step: 0.5,
+      hint: "exp(-std × scale). Higher = harsher movement penalty." },
+    { key: "angle_smooth_window",  label: "Angle Smoother Window",     min: 2,  max: 30,  step: 1,
+      hint: "AngleBuffer size. Higher = smoother but slower to react." },
+  ],
+  blink: [
+    { key: "ear_threshold",        label: "EAR Closed Threshold",    min: 0.15, max: 0.65, step: 0.01,
+      hint: "EAR below this = eye closed. Raise if blinks aren't registering." },
+    { key: "ear_consec_frames",    label: "EAR Consecutive Frames",  min: 1,    max: 6,    step: 1,
+      hint: "Frames eye must stay closed to confirm blink. Higher = ignores squints." },
+    { key: "blink_ideal",          label: "Ideal Blink Rate /min",   min: 5,    max: 35,   step: 0.5,
+      hint: "Blinks/min that gives blink_score of 1.0." },
+    { key: "blink_sigma",          label: "Blink Tolerance",         min: 1,    max: 20,   step: 0.5,
+      hint: "Wider = more forgiving on abnormal blink rates." },
+    { key: "blink_max_reasonable", label: "Blink Rate Clamp",        min: 20,   max: 100,  step: 1,
+      hint: "Hard cap on blinks/min to suppress noise." },
+  ],
+};
+
+let params = {};
+
+async function loadDefaults() {
+  const r = await fetch("/defaults");
+  const d = await r.json();
+  params = { ...d };
+  buildSliders();
+}
+
+function buildSliders() {
+  for (const [group, specs] of Object.entries(SLIDER_GROUPS)) {
+    const el = document.getElementById(`sliders-${group}`);
+    el.innerHTML = "";
+    for (const s of specs) {
+      el.appendChild(makeSlider(s));
+    }
+  }
+  updateWeightWarn();
+}
+
+function makeSlider(s) {
+  const wrap = document.createElement("div");
+  wrap.className = "slider-row";
+  const val = params[s.key] ?? 0;
+  wrap.innerHTML = `
+    <div class="slider-meta">
+      <span class="slider-name">${s.label}</span>
+      <span class="slider-val" id="val-${s.key}">${displayVal(s, val)}</span>
+    </div>
+    <input type="range" id="sl-${s.key}"
+      min="${s.min}" max="${s.max}" step="${s.step}" value="${val}">
+    ${s.hint ? `<div class="weight-hint">${s.hint}</div>` : ""}
+  `;
+  wrap.querySelector("input").addEventListener("input", e => {
+    const v = parseFloat(e.target.value);
+    params[s.key] = v;
+    document.getElementById(`val-${s.key}`).textContent = displayVal(s, v);
+    if (s.key.startsWith("w_")) updateWeightWarn();
+  });
+  return wrap;
+}
+
+function displayVal(s, v) {
+  if (s.step >= 1) return Math.round(v);
+  return v.toFixed(s.step < 0.1 ? 2 : 1);
+}
+
+function updateWeightWarn() {
+  const sum = ["w_face_ratio","w_head_stability","w_gaze_presence","w_blink_score"]
+    .reduce((a, k) => a + (params[k] || 0), 0);
+  const warn = document.getElementById("weight-sum-warn");
+  warn.style.display = Math.abs(sum - 1.0) > 0.05 ? "block" : "none";
+}
+
+function resetDefaults() { loadDefaults(); }
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  document.querySelector(`.tab:nth-child(${tab === "upload" ? 1 : 2})`).classList.add("active");
+  document.getElementById(`tab-${tab}`).classList.add("active");
+}
+
+// ── File drag & drop ───────────────────────────────────────────────────────
+const dropEl    = document.getElementById("file-drop");
+const fileInput = document.getElementById("file-input");
+let   selectedFile = null;
+
+dropEl.addEventListener("dragover", e => { e.preventDefault(); dropEl.classList.add("drag-over"); });
+dropEl.addEventListener("dragleave", () => dropEl.classList.remove("drag-over"));
+dropEl.addEventListener("drop", e => {
+  e.preventDefault(); dropEl.classList.remove("drag-over");
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  selectedFile = f;
+  document.getElementById("upload-status").textContent = `Selected: ${f.name} (${(f.size/1e6).toFixed(1)} MB)`;
+  document.getElementById("upload-status").className = "status-line ok";
+  document.getElementById("upload-btn").disabled = false;
+}
+
+async function uploadVideo() {
+  if (!selectedFile) return;
+  setLoading("upload", true);
+  setStatus("upload", "Uploading…", "busy");
+  const fd = new FormData();
+  fd.append("video", selectedFile);
+  const r = await fetch("/upload", { method: "POST", body: fd });
+  const d = await r.json();
+  setLoading("upload", false);
+  if (d.error) { setStatus("upload", "❌ " + d.error, "err"); return; }
+  videoPath = d.path;
+  setStatus("upload", "✓ Ready: " + selectedFile.name, "ok");
+  enableAnalyze();
+}
+
+async function recordVideo() {
+  const dur = parseInt(document.getElementById("rec-duration").value) || 8;
+  setLoading("record", true);
+  setStatus("record", `⏺ Recording ${dur}s… stay still`, "busy");
+  document.getElementById("record-btn").disabled = true;
+  const r = await fetch("/record", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ duration: dur }) });
+  const d = await r.json();
+  setLoading("record", false);
+  document.getElementById("record-btn").disabled = false;
+  if (d.error) { setStatus("record", "❌ " + d.error, "err"); return; }
+  videoPath = d.path;
+  setStatus("record", "✓ Recorded. Ready to analyze.", "ok");
+  enableAnalyze();
+}
+
+// ── Analysis ───────────────────────────────────────────────────────────────
+function enableAnalyze() {
+  document.getElementById("analyze-btn").disabled = false;
+  document.getElementById("analyze-status").textContent = "Video ready — click Analyze";
+  document.getElementById("analyze-status").className = "status-line ok";
+}
+
+async function runAnalysis() {
+  if (!videoPath) return;
+  lastParams = { ...params };
+  setLoading("analyze", true);
+  setStatus("analyze", "Analyzing… this may take a moment", "busy");
+
+  const r = await fetch("/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ video_path: videoPath, params: lastParams })
+  });
+  const d = await r.json();
+  setLoading("analyze", false);
+
+  if (d.error) { setStatus("analyze", "❌ " + d.error, "err"); return; }
+
+  lastResults = d;
+  setStatus("analyze", `✓ Done — Run #${++runCount}`, "ok");
+  renderResults(d);
+  updateExport(d);
+  appendLog(d);
+}
+
+function renderResults(d) {
+  const conf = d.confidence;
+  // Ring
+  const circ = 2 * Math.PI * 80;
+  const offset = circ * (1 - conf);
+  document.getElementById("ring-fill").style.strokeDashoffset = offset;
+  document.getElementById("ring-label").textContent = (conf * 100).toFixed(1) + "%";
+  const color = conf > 0.7 ? "var(--accent)" : conf > 0.4 ? "#ffcc00" : "var(--accent2)";
+  document.getElementById("ring-fill").style.stroke = color;
+
+  // Cards
+  setMetric("face-ratio",     d.face_ratio,     d.face_ratio);
+  setMetric("head-stability", d.head_stability,  d.head_stability);
+  setMetric("gaze-presence",  d.gaze_presence,  d.gaze_presence);
+  setMetric("blink-score",    d.blink_score,     d.blink_score);
+  document.getElementById("m-blink-rate").textContent = d.blink_rate + "/min";
+  document.getElementById("m-frames").textContent     = d.frames_analyzed + " fr";
+}
+
+function setMetric(id, val, barFrac) {
+  document.getElementById(`m-${id}`).textContent = (val * 100).toFixed(1) + "%";
+  setTimeout(() => { document.getElementById(`b-${id}`).style.width = (barFrac * 100).toFixed(1) + "%"; }, 50);
+}
+
+function appendLog(d) {
+  const log = document.getElementById("run-log");
+  if (runCount === 1) log.innerHTML = "";
+  const ts = new Date().toLocaleTimeString("en-US", { hour12: false });
+  const row = document.createElement("div");
+  row.className = "log-entry";
+  row.innerHTML = `
+    <span class="log-ts">${ts}</span>
+    <span class="log-conf">${(d.confidence*100).toFixed(1)}%</span>
+    <span class="log-note">fr=${d.face_ratio} stab=${d.head_stability} gaze=${d.gaze_presence} blink=${d.blink_score} (${d.blink_rate}/min)</span>
+  `;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+function updateExport(d) {
+  const p = d.params_used || lastParams;
+  document.getElementById("export-pre").textContent = JSON.stringify(p, null, 2);
+}
+
+function copyExport() {
+  const text = document.getElementById("export-pre").textContent;
+  navigator.clipboard.writeText(text);
+  flash("⎘ Copied JSON");
+}
+
+function copyPythonDict() {
+  const p = lastResults?.params_used || lastParams;
+  if (!p) return;
+  const lines = Object.entries(p).map(([k, v]) =>
+    `    "${k}": ${typeof v === "number" ? v : JSON.stringify(v)},`
+  ).join("\n");
+  const txt = `PARAMS = {\n${lines}\n}`;
+  navigator.clipboard.writeText(txt);
+  flash("⎘ Copied Python dict");
+}
+
+function flash(msg) {
+  const old = document.querySelector(".copy-row .btn-outline");
+  const orig = old.textContent;
+  old.textContent = msg;
+  setTimeout(() => old.textContent = orig, 1500);
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function setLoading(id, on) {
+  const label   = document.getElementById(`${id}-label`);
+  const spinner = document.getElementById(`${id}-spinner`);
+  if (label)   label.style.display   = on ? "none"  : "inline";
+  if (spinner) spinner.style.display = on ? "block" : "none";
+}
+
+function setStatus(id, msg, cls) {
+  const el = document.getElementById(`${id}-status`);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `status-line ${cls}`;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadDefaults();
+</script>
+</body>
+</html>

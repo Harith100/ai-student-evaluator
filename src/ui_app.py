@@ -33,7 +33,8 @@ def evaluate_answers(questions, *answers):
         sem = semantic_score(student, q["model_answer"])
         judge = json.loads(judge_answer(student, q["expected_concepts"], q["model_answer"]))
 
-        raw = sem * 0.90 + judge["coverage"] * 0.10
+        raw = sem * 0.40 + judge["coverage"] * 0.60
+
         final = max(0.0, min(1.0, raw))
         display = final * 10
 
@@ -53,13 +54,13 @@ with gr.Blocks() as demo:
         questions_state = gr.State()
         answer_boxes = []
         q_labels = []
-    
+
         for i in range(12):
             q = gr.Markdown()
             a = gr.Textbox(lines=3, label=f"Your Answer {i+1}")
             q_labels.append(q)
             answer_boxes.append(a)
-    
+
         eval_btn = gr.Button("Evaluate")
         result_box = gr.Textbox(lines=20, label="Results")
 
